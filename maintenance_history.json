@@ -1,9 +1,19 @@
 {
-    "MX-001": [
-      {"date": "2026-06-01", "action": "Replaced bearing", "technician": "Bob"},
-      {"date": "2026-07-10", "action": "Lubrication service", "technician": "Automation"}
-    ],
-    "curing_press": [
-      {"date": "2026-05-15", "action": "Sensor recalibration", "technician": "Bob"}
-    ]
-  }
+  "MX-001": [
+    {"date": "2026-03-02", "action": "Replaced motor bearing (TF-101)", "technician": "Bob", "notes": "Vibration had been trending upward for two weeks prior to failure."},
+    {"date": "2026-07-10", "action": "Routine lubrication service", "technician": "Automated PM", "notes": "No anomalies found during inspection."}
+  ],
+  "EX-002": [
+    {"date": "2026-05-01", "action": "Die alignment check", "technician": "Priya", "notes": "Realigned tread-profile die; readings within tolerance after adjustment."}
+  ],
+  "CP-003": [
+    {"date": "2026-01-20", "action": "Replaced thermal gasket (TF-202)", "technician": "Bob", "notes": "Gasket showed visible degradation from repeated heat cycling."},
+    {"date": "2026-05-15", "action": "Pressure sensor recalibration", "technician": "Bob", "notes": "Sensor had drifted 3% from reference; recalibrated to spec."}
+  ],
+  "CU-004": [
+    {"date": "2026-04-28", "action": "Cooling pump inspection", "technician": "Priya", "notes": "No leaks or wear detected; pump within expected service life."}
+  ],
+  "IS-005": [
+    {"date": "2026-04-10", "action": "Vibration damper mount replacement (TF-505)", "technician": "Automated PM", "notes": "Preventive swap at 4,000 operating hours per schedule."}
+  ]
+}
