@@ -1,5 +1,7 @@
 # 🏭 TireForge Predictive Maintenance — Multi-Agent AI System
 
+[![Tests](https://github.com/fvalerii/azure-predictive-maintenance-agents/actions/workflows/tests.yml/badge.svg)](https://github.com/fvalerii/azure-predictive-maintenance-agents/actions/workflows/tests.yml)
+
 A multi-agent AI system, built on **Microsoft Foundry (Azure AI Foundry Agent Service)**, that watches live sensor telemetry across a tire manufacturing plant, detects anomalies, diagnoses root causes, checks maintenance history and spare-part inventory, grounds its recommendations in the equipment manual, and — for critical faults — routes the decision through a human approval gate before opening a maintenance work order.
 
 This started as the **Factory** scenario of Microsoft's *Foundry Agent-a-Thon* (FrontierWeekHack) hands-on lab and was extended well beyond the base exercises — see [What I Built](#what-i-built) below for what's original work versus lab scaffolding.
@@ -64,6 +66,7 @@ The folders are organized as build phases, each with its own detailed README:
 | [`challenge-4-deploy/`](./challenge-4-deploy/README.md) | `deploy.py` — multi-agent orchestration (Python + portal `WorkflowAgentDefinition`); `evaluation_dataset.json` |
 | `TireForge_Manual_V2.md` | Mock equipment manual used as the RAG knowledge base |
 | `inventory.json`, `maintenance_history.json` | Mock spare-parts and CMMS data used by the tool functions |
+| `tests/` | `pytest` suite covering the local tool logic (no Azure required) |
 | `cleanup.sh` | Tears down all Azure resources created by `deploy.sh` |
 
 ## Getting Started
@@ -89,6 +92,15 @@ cd ../challenge-4-deploy && python deploy.py
 ```
 
 Each folder's README walks through that step in detail, including what to expect in the Foundry portal. When you're done, tear everything down with `bash cleanup.sh` (reads the resource group from your `.env`).
+
+## Testing (no Azure required)
+
+The agents themselves need a deployed Foundry project to run, but the tool logic they call (`check_thresholds`, `fetch_maintenance_history`, `lookup_spare_parts`, `create_work_order`) is plain Python that only reads/writes local JSON — no cloud dependency. That logic has a `pytest` suite that runs on every push via GitHub Actions (see the badge above), so you can verify the core logic works without provisioning anything:
+
+```bash
+pip install -r requirements-dev.txt
+pytest -v
+```
 
 ## Roadmap
 

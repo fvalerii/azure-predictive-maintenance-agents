@@ -30,3 +30,7 @@ Thumbs.db
 
 # Runtime-generated demo output
 work_orders.json
+
+# Test artifacts
+.pytest_cache/
+
