@@ -9,7 +9,7 @@ By the end of this phase you'll have:
 - ✅ Run a systematic evaluation of your agents against a test dataset
 - ✅ Used built-in evaluators (coherence, fluency) to measure quality
 - ✅ Interpreted evaluation metrics and identified areas for improvement
-- ✅ Understanding of how to integrate evaluations into a CI/CD pipeline
+- ✅ A scripted, repeatable version of that evaluation wired into CI as a quality gate on every pull request
 
 ![evaluate](./images/evaluate.png)
 
@@ -57,7 +57,23 @@ These two scores together give you a quick signal on output quality. When you se
 
 ## Get Started
 
-The evaluation dataset has already been prepared for you as [eval_portal.jsonl](./eval_portal.jsonl) — 10 machine sensor scenarios ready to upload.
+The evaluation dataset has already been prepared for you as [eval_portal.jsonl](./eval_portal.jsonl) — 10 machine sensor scenarios. There are two ways to run it: a **script** (repeatable, CI-friendly, no clicking required) or the **Foundry portal** (visual, good for exploring individual results).
+
+### Option A: Script (`evaluate.py`)
+
+[evaluate.py](./evaluate.py) sends every case in `eval_portal.jsonl` through the deployed `anomaly-detection-agent`, scores each response for coherence and fluency using the Azure AI Evaluation SDK directly (no portal upload step), and exits with a non-zero status if either aggregate score drops below a threshold (`EVAL_SCORE_THRESHOLD`, default `3.5`):
+
+```bash
+cd challenge-3-evaluate
+pip install -r ../requirements-dev.txt
+python evaluate.py
+```
+
+Full per-row results are written to `evaluation_results.json` in this folder (git-ignored, since it's a run artifact). This is the same script [`.github/workflows/evaluate.yml`](../.github/workflows/evaluate.yml) runs automatically on every pull request — see [Integrating into CI/CD](#integrating-into-cicd) below.
+
+### Option B: Foundry portal
+
+If you'd rather click through it visually and inspect individual traces in the UI:
 
 ---
 
@@ -89,9 +105,23 @@ There are two ways to read the results, and they answer different questions:
 
 ---
 
+## Integrating into CI/CD
+
+The README's own "Next Steps" suggestion is to run evaluations automatically on every pull request and block the release if quality drops below a threshold — [`.github/workflows/evaluate.yml`](../.github/workflows/evaluate.yml) implements exactly that:
+
+1. On every pull request, it installs dependencies and runs `evaluate.py` against the live agent.
+2. If the aggregate Coherence or Fluency score falls below `EVAL_SCORE_THRESHOLD` (3.5 by default), the job fails — a system prompt or model change that silently degrades diagnosis quality gets caught before merge instead of in production.
+3. Full per-row results are uploaded as a workflow artifact so you can inspect exactly which test cases dragged the average down.
+
+This job needs a live Foundry deployment and Azure credentials, so it's gated behind a repo variable rather than running unconditionally:
+
+- **Repo variable** `AZURE_EVAL_ENABLED = "true"` (Settings → Secrets and variables → Actions → Variables) — the explicit on/off switch. Without it, the job is skipped (not failed), so this repo doesn't show a permanently red check once the Foundry resources are torn down via `cleanup.sh`.
+- **Repo secrets**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (for OIDC login — see [Connect GitHub Actions to Azure](https://learn.microsoft.com/azure/developer/github/connect-from-azure)), plus `PROJECT_CONNECTION_STRING`, `FOUNDRY_ENDPOINT`, and `MODEL_DEPLOYMENT_NAME` from your `.env`.
+
 ## Verification Checklist
 
-- [ ] Evaluation runs against all 10 test cases without errors
+- [ ] Evaluation runs against all 10 test cases without errors (via script or portal)
 - [ ] You can see per-row scores for coherence and fluency
 - [ ] You've identified at least one case where the agent could improve
 - [ ] You understand the difference between aggregate metrics and per-row analysis
+- [ ] `evaluate.py` fails with a non-zero exit code when scores drop below `EVAL_SCORE_THRESHOLD`

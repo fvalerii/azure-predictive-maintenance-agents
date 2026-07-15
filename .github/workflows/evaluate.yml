@@ -1,0 +1,67 @@
+name: Agent Quality Gate
+
+# Runs the Anomaly Detection Agent's LLM-as-judge evaluation (coherence +
+# fluency) against the 10-case dataset in challenge-3-evaluate/, and fails
+# the build if either score drops below EVAL_SCORE_THRESHOLD. This is the
+# "Integrate evaluations into CI/CD" idea from the project README, applied
+# to every pull request instead of running it manually in the Foundry
+# portal.
+#
+# Requires a deployed Foundry project and Azure OIDC federated credentials
+# configured as repo secrets (Settings -> Secrets and variables -> Actions):
+#   Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+#            PROJECT_CONNECTION_STRING, FOUNDRY_ENDPOINT, MODEL_DEPLOYMENT_NAME
+#   Variables: AZURE_EVAL_ENABLED = "true"
+# See: https://learn.microsoft.com/azure/developer/github/connect-from-azure
+#
+# The AZURE_EVAL_ENABLED repo variable is an explicit on/off switch: this job
+# is skipped (not failed) unless it's set to "true", so forks, PRs from
+# contributors without access to secrets, and portfolio browsing after the
+# Foundry resources have been torn down via cleanup.sh don't show a
+# permanently red check.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    if: ${{ vars.AZURE_EVAL_ENABLED == 'true' }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      EVAL_SCORE_THRESHOLD: "3.5"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run agent evaluation
+        working-directory: challenge-3-evaluate
+        env:
+          PROJECT_CONNECTION_STRING: ${{ secrets.PROJECT_CONNECTION_STRING }}
+          FOUNDRY_ENDPOINT: ${{ secrets.FOUNDRY_ENDPOINT }}
+          MODEL_DEPLOYMENT_NAME: ${{ secrets.MODEL_DEPLOYMENT_NAME }}
+        run: python evaluate.py
+
+      - name: Upload evaluation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-results
+          path: challenge-3-evaluate/evaluation_results.json
+          if-no-files-found: ignore

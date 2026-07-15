@@ -1,6 +1,7 @@
 # 🏭 TireForge Predictive Maintenance — Multi-Agent AI System
 
 [![Tests](https://github.com/fvalerii/azure-predictive-maintenance-agents/actions/workflows/tests.yml/badge.svg)](https://github.com/fvalerii/azure-predictive-maintenance-agents/actions/workflows/tests.yml)
+[![Agent Quality Gate](https://github.com/fvalerii/azure-predictive-maintenance-agents/actions/workflows/evaluate.yml/badge.svg)](https://github.com/fvalerii/azure-predictive-maintenance-agents/actions/workflows/evaluate.yml)
 
 A multi-agent AI system, built on **Microsoft Foundry (Azure AI Foundry Agent Service)**, that watches live sensor telemetry across a tire manufacturing plant, detects anomalies, diagnoses root causes, checks maintenance history and spare-part inventory, grounds its recommendations in the equipment manual, and — for critical faults — routes the decision through a human approval gate before opening a maintenance work order.
 
@@ -62,7 +63,7 @@ The folders are organized as build phases, each with its own detailed README:
 | [`challenge-0-setup/`](./challenge-0-setup/README.md) | `deploy.sh` — provisions the Foundry resource, project, model deployment, Log Analytics, and Application Insights via Azure CLI |
 | [`challenge-1-build/`](./challenge-1-build/README.md) | `agents.py` — the Anomaly Detection + Fault Diagnosis agents, their tools, and the human-approval workflow; `sensor_data.json` — mock live telemetry |
 | [`challenge-2-monitor/`](./challenge-2-monitor/README.md) | `monitor.py` — enables GenAI tracing and verifies traces land in Application Insights |
-| [`challenge-3-evaluate/`](./challenge-3-evaluate/README.md) | `eval_portal.jsonl` — evaluation dataset for LLM-as-judge scoring in the Foundry portal |
+| [`challenge-3-evaluate/`](./challenge-3-evaluate/README.md) | `eval_portal.jsonl` — evaluation dataset; `evaluate.py` — scripted LLM-as-judge scoring, also run as a CI quality gate |
 | [`challenge-4-deploy/`](./challenge-4-deploy/README.md) | `deploy.py` — multi-agent orchestration (Python + portal `WorkflowAgentDefinition`); `evaluation_dataset.json` |
 | `TireForge_Manual_V2.md` | Mock equipment manual used as the RAG knowledge base |
 | `inventory.json`, `maintenance_history.json` | Mock spare-parts and CMMS data used by the tool functions |
@@ -110,9 +111,9 @@ The base lab suggests several directions to extend the system further — here's
 - [x] Knowledge base / File Search grounding for the diagnosis agent
 - [x] Human-in-the-loop approval for critical actions
 - [x] Hosted, production-style workflow orchestration
+- [x] CI/CD quality gate — `evaluate.py` runs the evaluation dataset on every pull request and fails the build if coherence/fluency drops below threshold (see [`challenge-3-evaluate/`](./challenge-3-evaluate/README.md#integrating-into-cicd))
 - [ ] Parallelize anomaly checks across all 5 machines instead of sequential tool calls
 - [ ] Confidence thresholds — escalate to a human when the Anomaly Agent is uncertain, not just when faults are critical
-- [ ] CI/CD quality gate — run the evaluation dataset automatically on every prompt/model change
 - [ ] Swap the mock JSON data sources (`sensor_data.json`, `inventory.json`, `maintenance_history.json`) for a live IoT Hub / real CMMS and ERP integration
 
 ## Acknowledgements
