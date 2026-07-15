@@ -27,13 +27,32 @@ ensure_agents_deployed()
         |
         v
 run_anomaly_scan()          <-- Anomaly Detection Agent checks all 5 machines
+                                 in PARALLEL (one call per machine, thread pool)
         |
-        v (for each machine with anomalies)
+        v
+   low confidence? --------> ESCALATED to a human, skipped from auto-diagnosis
+        |
+        v (remaining machines with anomalies, diagnosed in PARALLEL)
 run_fault_diagnosis()       <-- Fault Diagnosis Agent diagnoses root cause
         |
         v
 print_factory_report()      <-- Consolidated Health Report
 ```
+
+Two production-hardening details worth calling out, since they're easy to skip in a lab
+exercise but matter once this handles a real factory floor:
+
+- **Parallel execution.** Each machine gets its own agent call, run concurrently via a
+  thread pool (`concurrent.futures.ThreadPoolExecutor`) instead of one call handling all
+  5 machines sequentially. Wall-clock time for the scan is bounded by the *slowest* machine,
+  not the *sum* of all of them — the difference gets larger as the factory floor grows past 5
+  machines. The same pattern parallelizes fault diagnosis across every anomalous machine.
+- **Confidence-gated escalation.** The Anomaly Detection Agent is instructed to self-rate its
+  confidence per machine and end its response with `ESCALATE: YES` when it's genuinely unsure
+  whether a reading is a real fault (borderline values, conflicting signals). Escalated machines
+  are routed to a human instead of being passed to Fault Diagnosis automatically — feeding an
+  uncertain classification into diagnosis just produces a confident-sounding answer built on a
+  shaky premise, which is worse than surfacing the uncertainty directly.
 
 ---
 
@@ -44,9 +63,9 @@ print_factory_report()      <-- Consolidated Health Report
 Open [deploy.py](./deploy.py) and review:
 
 - **`ensure_agents_deployed()`** — lists existing agents, creates `anomaly-detection-agent` and `fault-diagnosis-agent` if not present
-- **`run_anomaly_scan()`** — calls the anomaly agent, handles the `check_thresholds` function call loop
-- **`run_fault_diagnosis()`** — calls the diagnosis agent for each affected machine
-- **`run_factory_health_workflow()`** — orchestrates all steps and returns the consolidated report
+- **`check_single_machine()`** / **`run_anomaly_scan()`** — checks all 5 machines concurrently (one agent call per machine), handling each `check_thresholds` function call loop and parsing the agent's `ESCALATE: YES/NO` self-assessment
+- **`run_fault_diagnosis()`** — calls the diagnosis agent for each affected machine (also run concurrently, one call per machine)
+- **`run_factory_health_workflow()`** — orchestrates all steps, excludes escalated machines from auto-diagnosis, and returns the consolidated report
 
 ### Step 2: Run the workflow
 
@@ -61,22 +80,30 @@ Expected output:
   Found existing: anomaly-detection-agent
   Found existing: fault-diagnosis-agent
 
-=== Step 2a: Anomaly Scan ===
-  CP-003 CRITICAL: vibration 143% above max, pressure 13.8% above max, temperature 10.3% above max
-  MX-001 WARNING: vibration 6.7% above max, temperature 2.6% above max
-  IS-005 WARNING: vibration 30% above max
-  ...
+=== Step 2a: Anomaly Scan (5 machines, parallel) ===
+  [EX-002] done
+  [CU-004] done
+  [MX-001] done
+  [IS-005] done
+  [CP-003] done
 
-=== Step 2b: Fault Diagnosis ===
-  Diagnosing CP-003...
-  Diagnosing MX-001...
-  Diagnosing IS-005...
+MX-001:
+WARNING: vibration 6.7% above max, temperature 2.6% above max ... ESCALATE: NO
+...
+
+=== Step 2b: Fault Diagnosis (parallel) ===
+  Diagnosed CP-003
+  Diagnosed MX-001
+  Diagnosed IS-005
 
 TIREFORGE FACTORY HEALTH REPORT
-  Machines checked   : 5
-  Machines affected  : 2
+  Machines checked     : 5
+  Machines affected    : 3
   ...
 ```
+
+(If the agent flags a machine as low-confidence, it appears under `Escalated to human`
+in the final report instead of `--- Fault Diagnoses ---`.)
 
 ---
 
@@ -192,9 +219,10 @@ TIREFORGE FACTORY HEALTH REPORT
 
 ## Verification Checklist
 
-- [ ] Python workflow runs end-to-end: anomaly scan → diagnosis → factory health report
+- [ ] Python workflow runs end-to-end: parallel anomaly scan → diagnosis → factory health report
 - [ ] Both agents visible in the Foundry portal as persistent assets
 - [ ] Visual workflow created in the portal and tested in its playground
+- [ ] `pytest tests/test_workflow.py -v` passes locally (no Azure credentials required)
 
 ---
 

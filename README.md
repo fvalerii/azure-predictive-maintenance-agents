@@ -34,6 +34,8 @@ The base lab asks you to build two agents that detect anomalies and diagnose fau
   - Calls **`lookup_spare_parts`** against a mock inventory system to check part availability before recommending a fix, and suggests a workaround if the part is out of stock.
   - Classifies urgency (`IMMEDIATE` / `WITHIN 24H` / `MONITOR`) and flags whether the action `REQUIRES_APPROVAL`.
 - **Human-in-the-loop approval gate** — when the diagnosis is `IMMEDIATE`, the pipeline stops and asks a human to approve before the `create_work_order` tool is allowed to open a ticket. Reject it, and it escalates to a shift supervisor instead of auto-executing.
+- **Confidence-gated escalation** — the Anomaly Detection Agent self-rates its confidence per machine; anything it flags as low-confidence (borderline readings, conflicting signals) is escalated to a human instead of being passed to Fault Diagnosis automatically, so an uncertain classification never gets laundered into a confident-sounding root-cause guess.
+- **Parallel multi-agent execution** — the production workflow checks all 5 machines concurrently (one agent call per machine via a thread pool) instead of sequentially, and diagnoses every anomalous machine concurrently too, so total latency is bounded by the slowest machine rather than the sum of all of them.
 - **Observability** — OpenTelemetry GenAI tracing exports every model call, tool call, and token count to Application Insights, so you can see exactly what data the model saw before it reached a conclusion.
 - **Evaluation** — a 10-scenario LLM-as-judge dataset (coherence + fluency) for regression-testing prompt/model changes.
 - **Multi-agent orchestration workflow** — both agents are wired into a `factory-health-workflow`, runnable either as Python code (step-by-step, with full function-call handling) or as a `WorkflowAgentDefinition` deployed to the Foundry portal and invoked asynchronously via the Responses API with background polling.
@@ -112,9 +114,10 @@ The base lab suggests several directions to extend the system further — here's
 - [x] Human-in-the-loop approval for critical actions
 - [x] Hosted, production-style workflow orchestration
 - [x] CI/CD quality gate — `evaluate.py` runs the evaluation dataset on every pull request and fails the build if coherence/fluency drops below threshold (see [`challenge-3-evaluate/`](./challenge-3-evaluate/README.md#integrating-into-cicd))
-- [ ] Parallelize anomaly checks across all 5 machines instead of sequential tool calls
-- [ ] Confidence thresholds — escalate to a human when the Anomaly Agent is uncertain, not just when faults are critical
+- [x] Parallelize anomaly checks across all 5 machines instead of sequential tool calls (see [`challenge-4-deploy/`](./challenge-4-deploy/README.md#the-workflow))
+- [x] Confidence thresholds — escalate to a human when the Anomaly Agent is uncertain, not just when faults are critical (see [`challenge-4-deploy/`](./challenge-4-deploy/README.md#the-workflow))
 - [ ] Swap the mock JSON data sources (`sensor_data.json`, `inventory.json`, `maintenance_history.json`) for a live IoT Hub / real CMMS and ERP integration
+- [ ] Fine-tune a model on TireForge-specific failure patterns — deliberately not attempted here: it needs real production-scale training data and a live training run to demonstrate credibly, which isn't practical for a mock dataset this size
 
 ## Acknowledgements
 

@@ -3,6 +3,7 @@ Challenge 4: Production Workflow -- SDK Track
 Multi-agent orchestration workflow for TireForge Industries.
 """
 
+import concurrent.futures
 import json
 import os
 import sys
@@ -102,10 +103,16 @@ def ensure_agents_deployed() -> tuple:
                 model=MODEL_DEPLOYMENT_NAME,
                 instructions=(
                     "You are an industrial sensor anomaly detection expert for TireForge Industries. "
-                    "When asked to check machines, use the check_thresholds tool for each machine ID. "
+                    "When asked to check a machine, use the check_thresholds tool for that machine ID. "
                     "Report every sensor reading that is out of spec: machine name, sensor, current value, "
                     "threshold violated, and deviation percentage. "
-                    "Use WARNING or CRITICAL labels. Be concise and structured."
+                    "Use WARNING or CRITICAL labels. Be concise and structured.\n\n"
+                    "Rate your CONFIDENCE in this classification from 1 (low -- borderline readings, "
+                    "conflicting signals, or you're unsure whether this is a real anomaly vs. sensor "
+                    "noise) to 5 (high -- clear-cut, unambiguous reading against the threshold). "
+                    "If your confidence is 2 or below, end your response with the exact phrase "
+                    "'ESCALATE: YES' so a human operator reviews this machine instead of it being "
+                    "passed to fault diagnosis automatically. Otherwise end with 'ESCALATE: NO'."
                 ),
                 tools=[check_thresholds_tool],
             ),
@@ -135,10 +142,21 @@ def ensure_agents_deployed() -> tuple:
     return ANOMALY_AGENT_NAME, DIAGNOSIS_AGENT_NAME
 
 
-def run_anomaly_scan(anomaly_agent_name: str) -> str:
-    """Call the anomaly detection agent for all machines; handle function call loop."""
-    print("\n=== Step 2a: Anomaly Scan ===")
+def _parse_escalation(report_text: str) -> bool:
+    """Whether the Anomaly Detection Agent flagged low confidence in its own
+    classification for this machine. Pulled out as a pure function so the
+    escalation decision is unit-testable without calling the live agent.
+    """
+    return "ESCALATE: YES" in report_text
 
+
+def check_single_machine(anomaly_agent_name: str, machine_id: str) -> dict:
+    """Call the anomaly detection agent for exactly one machine.
+
+    Used by run_anomaly_scan() to check all 5 machines concurrently instead
+    of one sequential batch call -- see run_anomaly_scan()'s docstring for
+    why that matters.
+    """
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
     from openai.types.responses.response_input_param import FunctionCallOutput
@@ -152,10 +170,7 @@ def run_anomaly_scan(anomaly_agent_name: str) -> str:
 
     conversation = openai_client.conversations.create()
     response = openai_client.responses.create(
-        input=(
-            f"Check all machines: {', '.join(MACHINES)}. "
-            "Report every sensor reading that is out of spec."
-        ),
+        input=f"Check machine {machine_id}. Report every sensor reading that is out of spec.",
         conversation=conversation.id,
         extra_body=agent_ref,
     )
@@ -165,7 +180,7 @@ def run_anomaly_scan(anomaly_agent_name: str) -> str:
         for item in response.output:
             if item.type == "function_call":
                 args = json.loads(item.arguments)
-                result = check_thresholds(args.get("machine_id", ""))
+                result = check_thresholds(args.get("machine_id", machine_id))
                 tool_outputs.append(
                     FunctionCallOutput(
                         type="function_call_output",
@@ -182,7 +197,41 @@ def run_anomaly_scan(anomaly_agent_name: str) -> str:
     report = response.output_text
     openai_client.conversations.delete(conversation_id=conversation.id)
     client.close()
-    return report
+    return {"machine_id": machine_id, "report": report, "escalate": _parse_escalation(report)}
+
+
+def run_anomaly_scan(anomaly_agent_name: str, machines: list = None) -> dict:
+    """Check every machine concurrently instead of sequentially.
+
+    The original implementation sent all 5 machines to the agent in a single
+    prompt, so wall-clock time scaled with however many tool calls the model
+    chose to make within one turn. Checking each machine in its own agent
+    call, run in parallel via a thread pool, cuts total latency from
+    roughly N x per-call latency down to ~1 x per-call latency (bounded by
+    the slowest machine) -- which matters a lot more once this scales past
+    5 machines to a real production line.
+
+    Returns a dict keyed by machine_id, each value containing the agent's
+    report text and whether it flagged low confidence in its own
+    classification (see _parse_escalation).
+    """
+    machines = machines or MACHINES
+    print(f"\n=== Step 2a: Anomaly Scan ({len(machines)} machines, parallel) ===")
+
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(machines)) as executor:
+        future_to_machine = {
+            executor.submit(check_single_machine, anomaly_agent_name, machine_id): machine_id
+            for machine_id in machines
+        }
+        for future in concurrent.futures.as_completed(future_to_machine):
+            machine_id = future_to_machine[future]
+            result = future.result()
+            results[machine_id] = result
+            flag = " (low confidence -- escalated)" if result["escalate"] else ""
+            print(f"  [{machine_id}] done{flag}")
+
+    return results
 
 
 def run_fault_diagnosis(diagnosis_agent_name: str, machine_id: str, anomalies: list) -> str:
@@ -220,25 +269,48 @@ def run_fault_diagnosis(diagnosis_agent_name: str, machine_id: str, anomalies: l
 
 
 def run_factory_health_workflow(anomaly_agent: str, diagnosis_agent: str) -> dict:
-    """Orchestrate: anomaly scan -> per-machine diagnosis -> consolidated report."""
-    anomaly_report = run_anomaly_scan(anomaly_agent)
-    print(anomaly_report)
+    """Orchestrate: parallel anomaly scan -> parallel diagnosis -> consolidated
+    report. Machines the Anomaly Detection Agent itself flagged as
+    low-confidence are escalated to a human instead of being passed to Fault
+    Diagnosis automatically -- an uncertain classification fed into
+    diagnosis just produces a confident-sounding answer built on a shaky
+    premise, which is worse than surfacing the uncertainty directly.
+    """
+    anomaly_results = run_anomaly_scan(anomaly_agent)
+    for machine_id, result in anomaly_results.items():
+        print(f"\n{machine_id}:\n{result['report']}")
 
-    print("\n=== Step 2b: Fault Diagnosis ===")
-    diagnoses = {}
+    escalated_machines = sorted(m for m, r in anomaly_results.items() if r["escalate"])
+
+    print("\n=== Step 2b: Fault Diagnosis (parallel) ===")
     machines_with_anomalies = []
-
+    machine_anomalies = {}
     for machine_id in MACHINES:
+        if machine_id in escalated_machines:
+            continue
         result = json.loads(check_thresholds(machine_id))
         if result.get("anomalies"):
             machines_with_anomalies.append(machine_id)
-            print(f"  Diagnosing {machine_id}...")
-            diagnosis = run_fault_diagnosis(diagnosis_agent, machine_id, result["anomalies"])
-            diagnoses[machine_id] = diagnosis
+            machine_anomalies[machine_id] = result["anomalies"]
+
+    diagnoses = {}
+    if machines_with_anomalies:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(machines_with_anomalies)) as executor:
+            future_to_machine = {
+                executor.submit(run_fault_diagnosis, diagnosis_agent, mid, machine_anomalies[mid]): mid
+                for mid in machines_with_anomalies
+            }
+            for future in concurrent.futures.as_completed(future_to_machine):
+                mid = future_to_machine[future]
+                diagnoses[mid] = future.result()
+                print(f"  Diagnosed {mid}")
+    else:
+        print("  Nothing to diagnose.")
 
     return {
-        "anomaly_report": anomaly_report,
+        "anomaly_results": anomaly_results,
         "machines_with_anomalies": machines_with_anomalies,
+        "escalated_machines": escalated_machines,
         "diagnoses": diagnoses,
         "total_machines": len(MACHINES),
         "problematic_machines": len(machines_with_anomalies),
@@ -249,16 +321,19 @@ def print_factory_report(report: dict):
     print("\n" + "=" * 60)
     print("TIREFORGE FACTORY HEALTH REPORT")
     print("=" * 60)
-    print(f"  Machines checked   : {report['total_machines']}")
-    print(f"  Machines affected  : {report['problematic_machines']}")
+    print(f"  Machines checked     : {report['total_machines']}")
+    print(f"  Machines affected    : {report['problematic_machines']}")
+
+    if report["escalated_machines"]:
+        print(f"  Escalated to human   : {', '.join(report['escalated_machines'])} (low-confidence anomaly classification)")
 
     if report["machines_with_anomalies"]:
-        print(f"  Affected machines  : {', '.join(report['machines_with_anomalies'])}")
+        print(f"  Affected machines    : {', '.join(report['machines_with_anomalies'])}")
         print("\n--- Fault Diagnoses ---")
         for machine_id, diagnosis in report["diagnoses"].items():
             print(f"\n{machine_id}:")
             print(diagnosis)
-    else:
+    elif not report["escalated_machines"]:
         print("\n  All machines operating within normal parameters.")
 
     print("=" * 60)
