@@ -1,0 +1,9 @@
+{
+    "MX-001": [
+      {"date": "2026-06-01", "action": "Replaced bearing", "technician": "Bob"},
+      {"date": "2026-07-10", "action": "Lubrication service", "technician": "Automation"}
+    ],
+    "curing_press": [
+      {"date": "2026-05-15", "action": "Sensor recalibration", "technician": "Bob"}
+    ]
+  }

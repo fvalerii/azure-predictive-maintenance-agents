@@ -1,0 +1,20 @@
+{
+    "TF-101": {
+      "name": "Motor Bearing",
+      "status": "IN_STOCK",
+      "quantity": 14,
+      "location": "Aisle 4, Bin B"
+    },
+    "TF-202": {
+      "name": "Thermal Gasket",
+      "status": "OUT_OF_STOCK",
+      "quantity": 0,
+      "lead_time_days": 12
+    },
+    "TF-303": {
+      "name": "Cooling Pump",
+      "status": "IN_STOCK",
+      "quantity": 2,
+      "location": "Aisle 1, Bin A"
+    }
+  }
