@@ -8,6 +8,58 @@ credentials and are exercised manually when running deploy.py end to end.
 import deploy
 
 
+# --- _create_response_with_retry ----------------------------------------------
+
+def test_create_response_with_retry_succeeds_after_transient_rate_limit(monkeypatch):
+    """Parallel calls can trip Azure OpenAI's rate limiter even when a
+    sequential run wouldn't -- this is the retry that makes the parallel
+    anomaly scan/diagnosis pool resilient to that.
+    """
+    from openai import RateLimitError
+
+    monkeypatch.setattr(deploy.time, "sleep", lambda seconds: None)
+
+    fake_response = object()
+    call_count = {"n": 0}
+
+    class FakeOpenAIClient:
+        class responses:
+            @staticmethod
+            def create(**kwargs):
+                call_count["n"] += 1
+                if call_count["n"] < 3:
+                    raise RateLimitError("rate limited", response=_fake_http_response(), body=None)
+                return fake_response
+
+    result = deploy._create_response_with_retry(FakeOpenAIClient, input="hello")
+
+    assert result is fake_response
+    assert call_count["n"] == 3
+
+
+def test_create_response_with_retry_raises_after_max_retries(monkeypatch):
+    from openai import RateLimitError
+
+    monkeypatch.setattr(deploy.time, "sleep", lambda seconds: None)
+
+    class FakeOpenAIClient:
+        class responses:
+            @staticmethod
+            def create(**kwargs):
+                raise RateLimitError("rate limited", response=_fake_http_response(), body=None)
+
+    try:
+        deploy._create_response_with_retry(FakeOpenAIClient, max_retries=2, input="hello")
+        assert False, "expected RateLimitError to propagate"
+    except RateLimitError:
+        pass
+
+
+def _fake_http_response():
+    import httpx
+    return httpx.Response(status_code=429, request=httpx.Request("POST", "https://example.test"))
+
+
 # --- _parse_escalation --------------------------------------------------------
 
 def test_parse_escalation_detects_flag():

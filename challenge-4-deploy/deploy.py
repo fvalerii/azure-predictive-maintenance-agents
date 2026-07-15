@@ -6,7 +6,9 @@ Multi-agent orchestration workflow for TireForge Industries.
 import concurrent.futures
 import json
 import os
+import random
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,8 +21,8 @@ def _find_repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-env_path = _find_repo_root() / ".env"
-load_dotenv(env_path)
+REPO_ROOT = _find_repo_root()
+load_dotenv(REPO_ROOT / ".env")
 
 PROJECT_CONNECTION_STRING = os.getenv("PROJECT_CONNECTION_STRING")
 MODEL_DEPLOYMENT_NAME = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-5.4")
@@ -31,6 +33,30 @@ ANOMALY_AGENT_NAME = "anomaly-detection-agent"
 DIAGNOSIS_AGENT_NAME = "fault-diagnosis-agent"
 # Set WORKFLOW_AGENT_NAME in .env after creating the workflow in the Foundry portal
 WORKFLOW_AGENT_NAME = os.getenv("WORKFLOW_AGENT_NAME", "")
+
+
+def _create_response_with_retry(openai_client, max_retries: int = 5, **kwargs):
+    """openai_client.responses.create() with exponential backoff on 429s.
+
+    Checking/diagnosing all machines concurrently (see run_anomaly_scan and
+    the diagnosis pool in run_factory_health_workflow) means several requests
+    can land on the model deployment at once. The default deploy.sh SKU
+    capacity (10 units) is comfortably enough for one sequential call at a
+    time but can trip Azure OpenAI's rate limiter under a burst -- so a
+    parallel workflow needs this retry, whereas the original sequential one
+    didn't.
+    """
+    from openai import RateLimitError
+
+    for attempt in range(max_retries):
+        try:
+            return openai_client.responses.create(**kwargs)
+        except RateLimitError:
+            if attempt == max_retries - 1:
+                raise
+            delay = (2 ** attempt) + random.uniform(0, 1)
+            print(f"    rate limited, retrying in {delay:.1f}s ({attempt + 1}/{max_retries})...")
+            time.sleep(delay)
 
 
 def check_thresholds(machine_id: str) -> str:
@@ -169,7 +195,8 @@ def check_single_machine(anomaly_agent_name: str, machine_id: str) -> dict:
     agent_ref = {"agent_reference": {"name": anomaly_agent_name, "type": "agent_reference"}}
 
     conversation = openai_client.conversations.create()
-    response = openai_client.responses.create(
+    response = _create_response_with_retry(
+        openai_client,
         input=f"Check machine {machine_id}. Report every sensor reading that is out of spec.",
         conversation=conversation.id,
         extra_body=agent_ref,
@@ -188,7 +215,8 @@ def check_single_machine(anomaly_agent_name: str, machine_id: str) -> dict:
                         output=result,
                     )
                 )
-        response = openai_client.responses.create(
+        response = _create_response_with_retry(
+            openai_client,
             input=tool_outputs,
             conversation=conversation.id,
             extra_body=agent_ref,
@@ -234,10 +262,50 @@ def run_anomaly_scan(anomaly_agent_name: str, machines: list = None) -> dict:
     return results
 
 
+def fetch_maintenance_history(machine_id: str) -> str:
+    """Same tool as challenge-1-build/agents.py, duplicated here (like
+    check_thresholds already was) so this file has no cross-folder import
+    dependency and stays runnable as a standalone script.
+    """
+    with open(REPO_ROOT / "maintenance_history.json", "r") as f:
+        history = json.load(f)
+    return json.dumps(history.get(machine_id, "No past maintenance history found."))
+
+
+def lookup_spare_parts(part_number: str) -> str:
+    inventory_file = REPO_ROOT / "inventory.json"
+    if not inventory_file.exists():
+        return json.dumps({"error": "Inventory database unavailable."})
+    with open(inventory_file, "r") as f:
+        inventory = json.load(f)
+    clean_part_number = part_number.replace("#", "").strip()
+    part_info = inventory.get(clean_part_number)
+    if part_info:
+        return json.dumps(part_info)
+    return json.dumps({"status": "UNKNOWN_PART", "message": f"Part {clean_part_number} not found in inventory system."})
+
+
+_DIAGNOSIS_TOOL_DISPATCH = {
+    "fetch_maintenance_history": lambda args: fetch_maintenance_history(args.get("machine_id", "")),
+    "lookup_spare_parts": lambda args: lookup_spare_parts(args.get("part_number", "")),
+    "check_thresholds": lambda args: check_thresholds(args.get("machine_id", "")),
+}
+
+
 def run_fault_diagnosis(diagnosis_agent_name: str, machine_id: str, anomalies: list) -> str:
-    """Call the fault diagnosis agent for a single machine."""
+    """Call the fault diagnosis agent for a single machine.
+
+    Handles the same function-call loop as check_single_machine(). This
+    matters because `fault-diagnosis-agent` is a shared name: if
+    challenge-1-build/agents.py already created it (with fetch_maintenance_history
+    and lookup_spare_parts attached as tools), this function reuses that
+    same version rather than a bare one -- and without a tool-call loop, the
+    call would come back with an empty response the instant the model tried
+    to use a tool.
+    """
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
+    from openai.types.responses.response_input_param import FunctionCallOutput
 
     client = AIProjectClient(
         endpoint=PROJECT_CONNECTION_STRING,
@@ -257,11 +325,30 @@ def run_fault_diagnosis(diagnosis_agent_name: str, machine_id: str, anomalies: l
     )
 
     conversation = openai_client.conversations.create()
-    response = openai_client.responses.create(
+    response = _create_response_with_retry(
+        openai_client,
         input=input_text,
         conversation=conversation.id,
         extra_body=agent_ref,
     )
+
+    while any(item.type == "function_call" for item in response.output):
+        tool_outputs = []
+        for item in response.output:
+            if item.type == "function_call":
+                args = json.loads(item.arguments)
+                handler = _DIAGNOSIS_TOOL_DISPATCH.get(item.name)
+                result = handler(args) if handler else json.dumps({"error": f"Unknown tool: {item.name}"})
+                tool_outputs.append(
+                    FunctionCallOutput(type="function_call_output", call_id=item.call_id, output=result)
+                )
+        response = _create_response_with_retry(
+            openai_client,
+            input=tool_outputs,
+            conversation=conversation.id,
+            extra_body=agent_ref,
+        )
+
     diagnosis = response.output_text
     openai_client.conversations.delete(conversation_id=conversation.id)
     client.close()

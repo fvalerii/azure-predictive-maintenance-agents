@@ -92,6 +92,21 @@ def test_lookup_spare_parts_unknown_part():
     assert part["status"] == "UNKNOWN_PART"
 
 
+# --- deploy.py duplicates fetch_maintenance_history/lookup_spare_parts too ---
+# (challenge-4-deploy/deploy.py's fault-diagnosis-agent may reuse the same
+# tooled agent version agents.py creates, so it needs matching local tools)
+
+def test_deploy_fetch_maintenance_history_matches_agents_version():
+    for machine in agents._load_sensor_batch():
+        mid = machine["machine_id"]
+        assert json.loads(agents.fetch_maintenance_history(mid)) == json.loads(deploy.fetch_maintenance_history(mid))
+
+
+def test_deploy_lookup_spare_parts_matches_agents_version():
+    for part in ("TF-101", "TF-202", "#TF-303", "TF-999"):
+        assert json.loads(agents.lookup_spare_parts(part)) == json.loads(deploy.lookup_spare_parts(part))
+
+
 # --- create_work_order --------------------------------------------------------
 
 def test_create_work_order_writes_expected_record(tmp_path, monkeypatch):
