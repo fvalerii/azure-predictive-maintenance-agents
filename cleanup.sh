@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # =============================================================================
-# Foundry Hackathon — Resource Cleanup Script (Factory)
+# Foundry Deployment — Resource Cleanup Script (Factory)
 # Deletes the resource group and all resources created by deploy.sh
 # =============================================================================
 
@@ -24,13 +24,13 @@ RESOURCE_GROUP="${RESOURCE_GROUP:-}"
 if [[ -z "$RESOURCE_GROUP" ]]; then
   echo ""
   echo "Error: RESOURCE_GROUP is not set."
-  echo "Usage: RESOURCE_GROUP=foundry-hackathon-rg-<suffix> bash cleanup.sh"
+  echo "Usage: RESOURCE_GROUP=foundry-tireforge-rg-<suffix> bash cleanup.sh"
   exit 1
 fi
 
 echo ""
 echo "=============================================="
-echo "  Foundry Hackathon — Resource Cleanup"
+echo "  Foundry Deployment — Resource Cleanup"
 echo "=============================================="
 echo ""
 echo "  Resource Group: $RESOURCE_GROUP"

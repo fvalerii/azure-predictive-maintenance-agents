@@ -1,10 +1,10 @@
-# Challenge 1: Build Agents
+# Phase 1 — Build the Agents
 
-Time: ~30 minutes
+**Estimated time to reproduce:** ~30 minutes
 
 ## Objectives
 
-By the end of this challenge, you will have:
+By the end of this phase you'll have:
 
 - ✅ An **Anomaly Detection Agent** that monitors sensor data and flags abnormal readings
 - ✅ A **Fault Diagnosis Agent** that analyzes flagged anomalies and recommends maintenance actions
@@ -27,7 +27,7 @@ Microsoft Foundry gives you two ways to build agents. The **Foundry portal** ([a
 
 ![foundry](./images/foundry.png)
 
-In this challenge we use the **SDK**. The code in [agents.py](./agents.py) creates both agents, registers their tools, and runs them against every machine in `sensor_data.json` — all from the terminal. After the script runs, both agents will also be visible in the portal under **Agents**, so you can inspect them, tweak their instructions, and test them interactively without touching any code.
+This phase uses the **SDK**. The code in [agents.py](./agents.py) creates both agents, registers their tools, and runs them against every machine in `sensor_data.json` — all from the terminal. After the script runs, both agents will also be visible in the portal under **Agents**, so you can inspect them, tweak their instructions, and test them interactively without touching any code.
 
 ## Agents and Tools
 
@@ -71,7 +71,7 @@ For TireForge Industries, useful knowledge bases would include:
 
 With this in place, the **Fault Diagnosis Agent** could query “what are the known failure modes of the CP-003 curing press when vibration exceeds 9.0 mm/s?” and retrieve relevant maintenance history — grounding its recommendation in documented precedent rather than general LLM knowledge.
 
-In this challenge the agents use **function tools**. The **Anomaly Detection Agent** uses `check_thresholds` to look up the acceptable operating ranges for each machine and compare them against live sensor readings. Without this tool, the agent would have to reason from memory alone — with it, every threshold check is grounded in actual machine spec data.
+In this phase the agents use **function tools**. The **Anomaly Detection Agent** uses `check_thresholds` to look up the acceptable operating ranges for each machine and compare them against live sensor readings. Without this tool, the agent would have to reason from memory alone — with it, every threshold check is grounded in actual machine spec data.
 
 ## Get Started
 
@@ -84,7 +84,7 @@ python agents.py
 
 As the script runs, watch the terminal closely — you'll see each agent being created, then each machine from `sensor_data.json` being sent through the **Anomaly Detection Agent** first, and its output handed off to the **Fault Diagnosis Agent**. You'll see the raw agent responses printed for every machine, giving you a live view of how the two agents collaborate. Once it completes, head to the [Microsoft Foundry portal](https://ai.azure.com/nextgen), open your project, and navigate to **Agents** in the left sidebar — hit **Refresh** if the agents don't appear immediately, as it can take a few seconds for newly created agents to show up in the portal.
 
-## Success Criteria
+## Verification Checklist
 
 - [ ] Anomaly Detection Agent correctly identifies the 2 warning + 1 critical machine
 - [ ] Fault Diagnosis Agent provides reasonable maintenance recommendations

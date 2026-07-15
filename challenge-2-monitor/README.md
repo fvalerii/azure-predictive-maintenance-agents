@@ -1,10 +1,10 @@
-# Challenge 2: Monitor with Application Insights
+# Phase 2 — Monitor with Application Insights
 
-Time: ~20 minutes
+**Estimated time to reproduce:** ~20 minutes
 
 ## Objectives
 
-By the end of this challenge, you will have:
+By the end of this phase you'll have:
 
 - ✅ GenAI tracing enabled for your Foundry agents
 - ✅ Agent interactions visible as traces in Application Insights
@@ -41,7 +41,7 @@ For TireForge specifically: a false negative from the Anomaly Detection Agent �
 
 Microsoft Foundry gives you two ways to monitor agents. The **Foundry portal** ([ai.azure.com/nextgen](https://ai.azure.com/nextgen)) has a built-in **Tracing** view where you can browse agent interactions, inspect individual spans, and see token usage and latency — no code required. **Application Insights** (via the Azure portal) gives you deeper analytics: Kusto queries, custom dashboards, and alerting rules.
 
-In this challenge we use the **SDK** — `monitor.py` instruments your agents so every interaction is automatically captured as a distributed trace. Once the script runs, you'll explore those traces using both portal options, seeing how each one presents the same data differently.
+This phase uses the **SDK** — `monitor.py` instruments your agents so every interaction is automatically captured as a distributed trace. Once the script runs, you'll explore those traces using both portal options, seeing how each one presents the same data differently.
 
 ## Prerequisites
 
@@ -128,7 +128,7 @@ You will see the **end-to-end transaction trace** showing:
 
 ---
 
-## Success Criteria
+## Verification Checklist
 
 - [ ] GenAI tracing is enabled and `monitor.py` ran successfully
 - [ ] You can browse agent traces in the Foundry portal **Traces** view and open a conversation

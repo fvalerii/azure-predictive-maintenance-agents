@@ -1,10 +1,10 @@
-# Challenge 0: Setup & Authentication
+# Phase 0 — Setup & Authentication
 
-Time: ~20 minutes
+**Estimated time to reproduce:** ~20 minutes
 
 ## Objectives
 
-By the end of this challenge, you will have:
+By the end of this phase you'll have:
 
 - ✅ A fully provisioned Microsoft Foundry project with a deployed model
 - ✅ Application Insights provisioned and connection string available
@@ -93,7 +93,7 @@ Select **gpt-5.4**, enter a test message in the model playground, and verify tha
 ![Foundry Model Playground](./images/foundry-model-playground.png)
 
 
-## Success Criteria
+## Verification Checklist
 
 - [ ] You can see your Microsoft Foundry project in the Azure Portal
 - [ ] A model deployment for gpt-5.4 shows "Succeeded" status

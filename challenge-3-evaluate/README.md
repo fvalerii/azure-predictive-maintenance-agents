@@ -1,10 +1,10 @@
-# Challenge 3: Evaluate
+# Phase 3 — Evaluate
 
-Time: ~30 minutes
+**Estimated time to reproduce:** ~30 minutes
 
 ## Objectives
 
-By the end of this challenge, you will have:
+By the end of this phase you'll have:
 
 - ✅ Run a systematic evaluation of your agents against a test dataset
 - ✅ Used built-in evaluators (coherence, fluency) to measure quality
@@ -89,7 +89,7 @@ There are two ways to read the results, and they answer different questions:
 
 ---
 
-## Success Criteria
+## Verification Checklist
 
 - [ ] Evaluation runs against all 10 test cases without errors
 - [ ] You can see per-row scores for coherence and fluency

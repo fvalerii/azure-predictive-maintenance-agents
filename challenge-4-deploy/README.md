@@ -1,13 +1,13 @@
-# Challenge 4: Production Workflow
+# Phase 4 — Production Workflow
 
-Time: ~20 minutes
+**Estimated time to reproduce:** ~20 minutes
 
 Build a multi-agent orchestration workflow for TireForge Industries and take it to production.
 
 ## Scenario
 
-The individual agents you built in Challenge 1 are valuable — but in production, agents need to work
-**together** as an automated pipeline. In this challenge you wire the two agents into a full
+The individual agents built in Phase 1 are valuable — but in production, agents need to work
+**together** as an automated pipeline. In this phase the two agents get wired into a full
 factory health workflow, run it from code, then build and test it visually in the Foundry portal.
 
 ![deploy](./images/deploy.png)
@@ -190,7 +190,7 @@ TIREFORGE FACTORY HEALTH REPORT
 
 ---
 
-## Success Criteria
+## Verification Checklist
 
 - [ ] Python workflow runs end-to-end: anomaly scan → diagnosis → factory health report
 - [ ] Both agents visible in the Foundry portal as persistent assets
@@ -198,7 +198,7 @@ TIREFORGE FACTORY HEALTH REPORT
 
 ---
 
-## Beyond the Lab: Production Deployment Options
+## Beyond This Project: Production Deployment Options
 
 You've built and tested your agents locally. Here's how to take them to production:
 
