@@ -133,10 +133,20 @@ CHECK_THRESHOLDS_TOOL = FunctionTool(
 # =============================================================================
 
 def upload_manual_to_vector_store(client: "AIProjectClient", file_path: str) -> str:
-    """Uploads a file to the project's vector store and returns the file ID."""
-    file = client.agents.upload_file(file_path=file_path)
-    print(f"✅ Uploaded manual: {file_path} (ID: {file.id})")
-    return file.id
+    """Uploads a file via the OpenAI-compatible client and creates a vector
+    store from it. Returns the vector store ID (what FileSearchTool expects),
+    not the raw file ID.
+    """
+    openai_client = client.get_openai_client()
+    with open(file_path, "rb") as f:
+        uploaded_file = openai_client.files.create(file=f, purpose="assistants")
+
+    vector_store = openai_client.vector_stores.create(
+        name="tireforge-manual",
+        file_ids=[uploaded_file.id],
+    )
+    print(f"✅ Uploaded manual: {file_path} (file ID: {uploaded_file.id}, vector store ID: {vector_store.id})")
+    return vector_store.id
 
 # =============================================================================
 # Tool Function: fetch_maintenance_history
@@ -348,9 +358,9 @@ class FaultDiagnosisAgent:
         self.openai = self.client.get_openai_client()
 
         manual_path = REPO_ROOT / "TireForge_Manual_V2.md"
-        file_id = upload_manual_to_vector_store(self.client, str(manual_path))
+        vector_store_id = upload_manual_to_vector_store(self.client, str(manual_path))
 
-        rag_tool = FileSearchTool(file_search={"file_ids": [file_id]})
+        rag_tool = FileSearchTool(vector_store_ids=[vector_store_id])
 
         system_prompt = """
         You are a mechanical fault diagnosis expert for TireForge Industries.
